@@ -1,2 +1,5 @@
 export const UUID_MAX_LENGTH = 36
 export const PHONE_NUMBER_MAX_LENGTH = 19
+
+export const LOCATION_VALUE_MAX_LENGTH = 255
+export const LOCATION_NAME_MAX_LENGTH = 255

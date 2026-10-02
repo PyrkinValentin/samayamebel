@@ -1,1 +1,3 @@
-export { Toaster, toast } from "./toast"
+export { Toaster } from "./toast"
+
+export { toastError, toastSuccess, toastWarning } from "./utils"

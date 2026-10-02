@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import "@cora-ui/react/styles";
+
+@theme {
+  --color-focus: var(--color-foreground);
+}
+
+@layer components {
+  .button {
+    &[data-variant="primary"] {
+      @apply bg-foreground text-white;
+
+      &:hover,
+      &:active {
+        @apply bg-foreground/90;
+      }
+    }
+  }
+
+  .link {
+    @apply text-foreground;
+
+    &:after {
+      @apply bg-foreground;
+    }
+
+    &:hover,
+    &:active {
+      @apply text-foreground/90;
+    }
+  }
+
+  .switch {
+    &[data-checked] {
+      @apply bg-foreground;
+
+      &:hover,
+      &:active {
+        @apply bg-foreground/90;
+      }
+    }
+  }
+
+  .checkbox__indicator {
+    @apply bg-foreground text-snow;
+
+    &:hover,
+    &:active {
+      @apply bg-foreground/90;
+    }
+  }
+
+  .pagination__page {
+    &[data-current] {
+      @apply bg-foreground;
+    }
+  }
+}

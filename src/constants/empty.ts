@@ -1,0 +1,1 @@
+export const LOCATION_EMPTY_NAME = "Населенный пункт"

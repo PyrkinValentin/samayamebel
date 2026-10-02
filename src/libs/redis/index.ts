@@ -1,0 +1,1 @@
+export { getCache, setCache, invalidateCache } from "./methods"

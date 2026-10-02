@@ -6,50 +6,90 @@ import type {
 	FormErrors,
 	SetFormError,
 	SetFormValue,
-	FormRefs,
 	GetFormValue,
 	FormValues,
-	SubscribeFormField,
 	FormControl,
 	UseFormWatchOptions,
-	UseFormFieldReturn,
-	EmitChangeSubscribers,
+	FormField,
 	UseFormFieldOptions,
 	FormSuccessResult,
 	ExecuteFormResult,
+	FormMethods,
+	ExecuteForm,
+	ResetFormField,
+	WatchSubscribeFormField,
+	EmitChangeWatchSubscribers,
 } from "./types"
 
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react"
+import type { FormActionContextValue } from "./context"
+
+import { use, useCallback, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react"
+
+import { FormActionContext } from "@/libs/action/context"
 
 import { FORM_EMPTY_ERRORS } from "./constants"
 
-export const useFormAction = <Action extends ActionClientReturn>(options: UseFormActionOptions<Action>) => {
+export const useFormAction = <Action extends ActionClientReturn>(options: UseFormActionOptions<Action>): FormMethods<Action> => {
 	const {
 		action,
 		initialValues,
 		resetAfterAction,
 	} = options
 
-	const refs = useRef<FormRefs<Action>>({})
 	const initialValuesRef = useRef({ ...initialValues })
 	const valuesRef = useRef({ ...initialValues })
-	const listenersRef = useRef<Set<() => void>>(new Set())
+	const watchSubscribersRef = useRef<Map<keyof FormValues<Action>, Set<(value: never) => void>>>(new Map())
 
 	const [errors, setErrors] = useState<FormErrors<Action>>(FORM_EMPTY_ERRORS)
 	const [pending, startTransition] = useTransition()
 
-	const subscribe = useCallback<SubscribeFormField>((callback) => {
-		listenersRef.current.add(callback)
+	const hasErrors = errors !== FORM_EMPTY_ERRORS
+
+	const watchSubscribe = useCallback<WatchSubscribeFormField<Action>>((field, callback) => {
+		if (!watchSubscribersRef.current.has(field)) {
+			watchSubscribersRef.current.set(field, new Set())
+		}
+
+		watchSubscribersRef.current
+			.get(field)
+			?.add(callback)
+
+		callback(valuesRef.current[field] as never)
 
 		return () => {
-			listenersRef.current.delete(callback)
+			const fieldSet = watchSubscribersRef.current.get(field)
+
+			if (fieldSet) {
+				fieldSet.delete(callback)
+
+				if (fieldSet.size === 0) {
+					watchSubscribersRef.current.delete(field)
+				}
+			}
 		}
 	}, [])
 
-	const emitChangeSubscribers = useCallback<EmitChangeSubscribers>(() => {
-		for (const listener of listenersRef.current) {
-			listener()
+	const emitChangeWatchSubscribers = useCallback<EmitChangeWatchSubscribers<Action>>((field) => {
+		if (field) {
+			const fieldSet = watchSubscribersRef.current.get(field)
+			const value = valuesRef.current[field] as never
+
+			if (fieldSet) {
+				for (const callback of fieldSet) {
+					callback(value)
+				}
+			}
+
+			return
 		}
+
+		watchSubscribersRef.current.forEach((fieldSet, field) => {
+			const value = valuesRef.current[field] as never
+
+			for (const callback of fieldSet) {
+				callback(value)
+			}
+		})
 	}, [])
 
 	const setError = useCallback<SetFormError<Action>>((field, message) => {
@@ -86,21 +126,51 @@ export const useFormAction = <Action extends ActionClientReturn>(options: UseFor
 		return valuesRef.current[field]
 	}, []) as GetFormValue<Action>
 
-	const setValue = useCallback<SetFormValue<Action>>((field, value) => {
-		const prevValue = valuesRef.current[field]
+	const setValue = useCallback((fieldOrValues, value) => {
+		if (value === undefined) {
+			const updateBatch = fieldOrValues as Partial<FormValues<Action>>
+
+			valuesRef.current = {
+				...valuesRef.current,
+				...updateBatch,
+			}
+
+			Object
+				.keys(updateBatch)
+				.forEach((key) => {
+					const field = key as keyof FormValues<Action>
+
+					setError(field)
+					emitChangeWatchSubscribers(field)
+				})
+
+			return
+		}
 
 		valuesRef.current = {
 			...valuesRef.current,
-			[field]: value instanceof Function
-				? value(prevValue)
-				: value
+			[fieldOrValues]: value instanceof Function
+				? value(valuesRef.current[fieldOrValues])
+				: value,
 		}
 
-		setError(field)
-		emitChangeSubscribers()
-	}, [emitChangeSubscribers, setError])
+		setError(fieldOrValues)
+		emitChangeWatchSubscribers(fieldOrValues)
+	}, [setError, emitChangeWatchSubscribers]) as SetFormValue<Action>
 
-	const execute = () => {
+	const resetField = useCallback<ResetFormField<Action>>((field) => {
+		setValue(field, initialValuesRef.current[field])
+	}, [setValue])
+
+	const reset = useCallback(() => {
+		if (hasErrors) {
+			setErrors(FORM_EMPTY_ERRORS)
+		}
+
+		setValue(initialValuesRef.current)
+	}, [hasErrors, setValue])
+
+	const execute = useCallback<ExecuteForm<Action>>(() => {
 		return new Promise<ExecuteFormResult<Action>>((resolve) => {
 			startTransition(async () => {
 				try {
@@ -118,7 +188,7 @@ export const useFormAction = <Action extends ActionClientReturn>(options: UseFor
 
 					if (resetAfterAction) {
 						reset()
-					} else if (errors !== FORM_EMPTY_ERRORS) {
+					} else if (hasErrors) {
 						setErrors(FORM_EMPTY_ERRORS)
 					}
 
@@ -141,61 +211,47 @@ export const useFormAction = <Action extends ActionClientReturn>(options: UseFor
 				}
 			})
 		})
-	}
-
-	const reset = () => {
-		const initialValues = { ...initialValuesRef.current }
-
-		if (errors !== FORM_EMPTY_ERRORS) {
-			setErrors(FORM_EMPTY_ERRORS)
-		}
-
-		valuesRef.current = initialValues
-
-		for (const key in refs.current) {
-			const element = refs.current[key]
-
-			if (element && "value" in element) {
-				element.value = initialValues[key] as string
-			}
-		}
-
-		emitChangeSubscribers()
-	}
+	}, [action, hasErrors, reset, resetAfterAction])
 
 	const control = useMemo<FormControl<Action>>(() => ({
-		subscribe,
+		watchSubscribe,
 		getValue,
 		setValue,
 	}), [
-		subscribe,
+		watchSubscribe,
 		getValue,
 		setValue,
 	])
 
 	return {
+		pending,
+		initialValues,
+		control,
 		errors,
 		setError,
-		initialValues,
 		getValue,
 		setValue,
 		execute,
-		pending,
+		watchField: watchSubscribe,
+		resetField,
 		reset,
-		control,
 	}
 }
 
 export const useFormWatch = <Action extends ActionClientReturn, Field extends keyof FormValues<Action>>(control: FormControl<Action>, options: UseFormWatchOptions<Action, Field>): FormValues<Action>[Field] => {
-	const { subscribe, getValue } = control
+	const { watchSubscribe, getValue } = control
 	const { field } = options
+
+	const subscribeToField = useCallback((callback: () => void) => {
+		return watchSubscribe(field, callback)
+	}, [watchSubscribe, field])
 
 	const getSnapshot = useCallback(() => getValue(field), [field, getValue])
 
-	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+	return useSyncExternalStore(subscribeToField, getSnapshot, getSnapshot)
 }
 
-export const useFormField = <Action extends ActionClientReturn, Field extends keyof FormValues<Action>>(control: FormControl<Action>, options: UseFormFieldOptions<Action, Field>): UseFormFieldReturn<Action, Field> => {
+export const useFormField = <Action extends ActionClientReturn, Field extends keyof FormValues<Action>>(control: FormControl<Action>, options: UseFormFieldOptions<Action, Field>): FormField<Action, Field> => {
 	const { setValue } = control
 	const { field } = options
 
@@ -211,3 +267,5 @@ export const useFormField = <Action extends ActionClientReturn, Field extends ke
 		onValueChange,
 	}
 }
+
+export const useFormActionContext = <Action extends ActionClientReturn>() => use<FormActionContextValue<Action>>(FormActionContext)

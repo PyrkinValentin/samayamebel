@@ -4,8 +4,6 @@ import type { ReactNode } from "react"
 
 import { useMediaQuery } from "@cora-ui/react/hooks"
 
-import { toSlug } from "@/utils"
-
 import { Toast } from "@cora-ui/react"
 
 type ToasterProps = {
@@ -21,39 +19,7 @@ type ToastSwipeDirection = "right" | "up" | "left" | "down"
 const TOAST_DESKTOP_SWIPE_DIRECTION: ToastSwipeDirection[] = ["up"]
 const TOAST_MOBILE_SWIPE_DIRECTION: ToastSwipeDirection[] = ["up", "left", "right"]
 
-const toastManager = Toast.createManager()
-
-const createId = (...keys: (string | undefined)[]) => {
-	return toSlug(
-		keys
-			.filter(Boolean)
-			.join("-")
-	)
-}
-
-export const toast = {
-	...toastManager,
-	success: (title: string, description?: string) => toastManager.add({
-		id: createId(title, description, "success"),
-		status: "success",
-		title,
-		description,
-	}),
-	warning: (title: string, description?: string) => toastManager.add({
-		id: createId(title, description, "warning"),
-		status: "warning",
-		title,
-		description,
-	}),
-	error: (title?: string, description?: string) => toastManager.add({
-		id: createId(title, description, "error"),
-		status: "error",
-		title: title ?? "Ошибка",
-		description: (title || description)
-			? description
-			: "Произошла непредвиденная ошибка. Повторите попытку",
-	}),
-}
+export const toastManager = Toast.createManager()
 
 export const Toaster = (props: ToasterProps) => {
 	const { children } = props

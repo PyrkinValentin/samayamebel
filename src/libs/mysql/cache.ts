@@ -1,131 +1,11 @@
-import type { MutationOption } from "drizzle-orm/cache/core/cache"
+import type { Cache, MutationOption } from "drizzle-orm/cache/core/cache"
 import type { CacheConfig } from "drizzle-orm/cache/core/types"
 
-import { Redis } from "ioredis"
-import { pack, unpack } from "msgpackr"
-import { createHash } from "crypto"
 import { getTableName, is, Table } from "drizzle-orm"
+import { getCache, setCache, invalidateCache } from "../redis"
 
-import { REDIS_URL } from "@/constants"
-
-// @typescript-eslint/no-explicit-any
+// eslint-disable-next-line
 const requests = new Map<string, Promise<any>>()
-
-const UNDEFINED_CACHE_MARKER = "__VAL_IS_UNDEFINED__"
-
-const globalForRedis = globalThis as unknown as {
-	redis?: Redis,
-}
-
-const redis =
-	globalForRedis.redis ??
-	new Redis(REDIS_URL, {
-		retryStrategy: (times) => Math.min(times * 50, 2000),
-		maxRetriesPerRequest: 6,
-		enableOfflineQueue: true,
-	})
-
-if (process.env.NODE_ENV !== "production") {
-	globalForRedis.redis = redis
-}
-
-const serialize = (value: unknown): Buffer => {
-	if (Buffer.isBuffer(value)) {
-		return value
-	}
-
-	try {
-		return pack(value)
-	} catch (error) {
-		throw error
-	}
-}
-
-const deserialize = <T>(data: Buffer | Uint8Array | null | undefined): T | undefined => {
-	if (
-		data === null ||
-		data === undefined ||
-		data.length === 0
-	) {
-		return undefined
-	}
-
-	try {
-		return unpack(data) as T
-	} catch {
-		return undefined
-	}
-}
-
-const generateDataKey = (tags: string[]): string => {
-	const sortedTags = [...tags]
-		.sort()
-		.join(",")
-
-	return createHash("sha256")
-		.update(sortedTags)
-		.digest("hex")
-}
-
-const getCache = async <T>(...tags: string[]): Promise<T | undefined> => {
-	if (tags.length === 0) return
-
-	try {
-		const dataKey = generateDataKey(tags)
-		const data = await redis.getBuffer(dataKey)
-
-		if (data && data.toString() === UNDEFINED_CACHE_MARKER) {
-			return
-		}
-
-		return deserialize<T>(data)
-	} catch {
-		return
-	}
-}
-
-const setCache = async (value: unknown, ttl: number, ...tags: string[]) => {
-	if (tags.length === 0) return
-
-	try {
-		const dataKey = generateDataKey(tags)
-		const pipeline = redis.pipeline()
-
-		const payload = value === undefined
-			? Buffer.from(UNDEFINED_CACHE_MARKER)
-			: serialize(value)
-
-		pipeline.set(dataKey, payload, "EX", ttl)
-
-		tags.forEach((tag) => {
-			pipeline.sadd(tag, dataKey)
-			pipeline.expire(tag, ttl)
-		})
-
-		await pipeline.exec()
-	} catch {
-	}
-}
-
-const invalidateCache = async (...tags: string[]) => {
-	if (tags.length === 0) return
-
-	try {
-		for (const tag of tags) {
-			const dataKeys = await redis.smembers(tag)
-
-			if (dataKeys && dataKeys.length > 0) {
-				const pipeline = redis.pipeline()
-
-				dataKeys.forEach((key) => pipeline.del(key))
-				pipeline.del(tag)
-
-				await pipeline.exec()
-			}
-		}
-	} catch {
-	}
-}
 
 const generateRequestKey = (key: string, tables: string[]) => {
 	return `${tables.join(":")}:${key}`
@@ -188,13 +68,13 @@ const clearRequests = (tables: string[]) => {
 	})
 }
 
-export const cache = {
-	strategy: (): "explicit" | "all" => "explicit",
-	get: (key: string, tables: string[]) => getRequest(key, tables),
-	put: (key: string, value: unknown, tables: string[], _: boolean, config: CacheConfig | undefined) => {
+export const cache: Cache = {
+	strategy: () => "explicit",
+	get: (key, tables) => getRequest(key, tables),
+	put: (key, value, tables, _, config) => {
 		return setCache(value, getTtl(config), ...tables, key)
 	},
-	onMutate: async (params: MutationOption) => {
+	onMutate: async (params) => {
 		const tables = getTables(params)
 
 		await invalidateCache(...tables)

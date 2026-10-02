@@ -7,11 +7,11 @@ import { useElementHeight, useScrollDirectionState } from "./hooks"
 
 import { classNames } from "@cora-ui/react/utils"
 
-type HeaderWrapperProps = {
+type HeaderLayoutProps = {
 	children: ReactNode
 }
 
-export const HeaderWrapper = (props: HeaderWrapperProps) => {
+export const HeaderLayout = (props: HeaderLayoutProps) => {
 	const { children } = props
 
 	const ref = useRef<HTMLElement>(null)

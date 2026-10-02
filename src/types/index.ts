@@ -1,0 +1,1 @@
+export type { CreateLocation, Location } from "./location"
