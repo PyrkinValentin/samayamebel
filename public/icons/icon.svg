@@ -1,0 +1,20 @@
+<svg role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" color="#0485F7">
+    <path
+            fill="currentColor"
+            d="M 51.993 265.462 L 285.497 265.462 L 335.17 352.864 L 3.533 355.462 L 51.993 265.462 Z"
+            transform="matrix(-0.906308, 0.422617, -0.422617, -0.906308, -0.000024, 0.000031)"
+            style="transform-box: fill-box; transform-origin: 50% 50%"
+    />
+    <path
+            fill="currentColor"
+            d="M 76.616 60.295 L 376.614 60.295 L 426.614 150.295 L 26.616 150.295 L 76.616 60.295 Z"
+            transform="matrix(0.906308, -0.422617, 0.422617, 0.906308, -0.000005, -0.000002)"
+            style="transform-box: fill-box; transform-origin: 50% 50%"
+    />
+    <path
+            fill="currentColor"
+            d="M 199.56 361.084 L 499.56 361.084 L 549.56 451.084 L 149.561 451.084 L 199.56 361.084 Z"
+            transform="matrix(-0.906308, 0.422617, -0.422617, -0.906308, 0.000024, -0.000061)"
+            style="transform-box: fill-box; transform-origin: 50% 50%"
+    />
+</svg>
